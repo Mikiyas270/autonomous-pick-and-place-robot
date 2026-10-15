@@ -17,6 +17,10 @@ double GyroSensor::GetRate() {
     return navx.GetRate();
 }
 
+double GyroSensor::GetRawGyroX() {
+    return navx.GetRawGyroX();
+}
+
 bool GyroSensor::IsConnected() {
     return navx.IsConnected();
 }
