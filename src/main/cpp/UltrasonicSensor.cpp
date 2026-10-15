@@ -1,6 +1,5 @@
 #include "UltrasonicSensor.h"
 
-
 UltrasonicSensor::UltrasonicSensor(
     int triggerChannel,
     int echoChannel
@@ -15,6 +14,10 @@ UltrasonicSensor::UltrasonicSensor(
     );
 }
 
+bool UltrasonicSensor::IsRangeValid()
+{
+    return sensor.IsRangeValid();
+}
 
 double
 UltrasonicSensor::GetDistanceMillimeters()
@@ -22,7 +25,6 @@ UltrasonicSensor::GetDistanceMillimeters()
     return
         sensor.GetRangeMM();
 }
-
 
 double
 UltrasonicSensor::GetDistanceCentimeters()
