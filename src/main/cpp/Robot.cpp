@@ -9,6 +9,7 @@
 #include "Constants.h"
 #include "DriveTrain.h"
 #include "GyroSensor.h"
+#include "GripperServo.h"
 #include "IRSensor.h"
 #include "LineFollower.h"
 #include "Lift.h"
@@ -23,6 +24,17 @@ public:
     {
         driveTrain.Stop();
         lift.Stop();
+
+        gripperTargetAngle =
+            Constants::kGripOpenAngle;
+
+        gripperCommandAngle =
+            Constants::kGripOpenAngle;
+
+        gripper.SetAngle(
+            gripperCommandAngle
+        );
+
         gyroXAngleDeg = 0.0;
     }
 
@@ -36,6 +48,7 @@ public:
     {
         UpdateGyro();
         RunAutonomous();
+        UpdateGripper();
         PublishDashboard();
     }
 
@@ -85,8 +98,10 @@ public:
         {
             RunManualDrive();
             RunManualLift();
+            RunManualGripper();
         }
 
+        UpdateGripper();
         PublishDashboard();
     }
 
@@ -108,6 +123,10 @@ private:
     DriveTrain driveTrain;
 
     Lift lift;
+
+    GripperServo gripper{
+        Constants::kGripServoChannel
+    };
 
     LineFollower lineFollower;
 
@@ -135,6 +154,9 @@ private:
     static constexpr int kLeftXAxis = 0;
     static constexpr int kLeftYAxis = 1;
     static constexpr int kRightXAxis = 2;
+
+    static constexpr int kAButton = 1;
+    static constexpr int kXButton = 2;
 
     static constexpr int kLBButton = 5;
     static constexpr int kRBButton = 6;
@@ -240,6 +262,17 @@ private:
     static constexpr double kMaxTurnOutput = 0.22;
     static constexpr double kMinTurnOutput = 0.055;
     static constexpr double kTurnToleranceDeg = 1.0;
+
+
+    // =========================================================
+    // GRIPPER STATE
+    // =========================================================
+
+    double gripperTargetAngle =
+        Constants::kGripOpenAngle;
+
+    double gripperCommandAngle =
+        Constants::kGripOpenAngle;
 
 
     // =========================================================
@@ -364,6 +397,83 @@ private:
 
 
     // =========================================================
+    // MANUAL GRIPPER
+    //
+    // A = open
+    // X = close
+    // =========================================================
+
+    void RunManualGripper()
+    {
+        if (controller.GetRawButton(kAButton))
+        {
+            gripperTargetAngle =
+                Constants::kGripOpenAngle;
+        }
+        else if (controller.GetRawButton(kXButton))
+        {
+            gripperTargetAngle =
+                Constants::kGripClosedAngle;
+        }
+    }
+
+
+    void UpdateGripper()
+    {
+        const double error =
+            gripperTargetAngle -
+            gripperCommandAngle;
+
+        if (std::abs(error)
+            <= Constants::kGripperTargetToleranceDeg)
+        {
+            gripperCommandAngle =
+                gripperTargetAngle;
+        }
+        else if (error > 0.0)
+        {
+            gripperCommandAngle +=
+                Constants::kGripStepPerLoop;
+
+            if (gripperCommandAngle >
+                gripperTargetAngle)
+            {
+                gripperCommandAngle =
+                    gripperTargetAngle;
+            }
+        }
+        else
+        {
+            gripperCommandAngle -=
+                Constants::kGripStepPerLoop;
+
+            if (gripperCommandAngle <
+                gripperTargetAngle)
+            {
+                gripperCommandAngle =
+                    gripperTargetAngle;
+            }
+        }
+
+        gripper.SetAngle(
+            gripperCommandAngle
+        );
+    }
+
+
+    bool IsGripperAtTarget() const
+    {
+        return
+            std::abs(
+                gripperTargetAngle -
+                gripperCommandAngle
+            )
+            <=
+            Constants::kGripperTargetToleranceDeg;
+    }
+
+
+    // =========================================================
     // AUTO CONTROL
     // =========================================================
 
@@ -387,6 +497,9 @@ private:
         flagReturnRemainingMm = 0.0;
 
         lift.ClearHomed();
+
+        gripperTargetAngle =
+            Constants::kGripOpenAngle;
 
         autoState = AutoState::HomeLift;
 
@@ -624,6 +737,9 @@ private:
             case AutoState::HomeLift:
             {
                 driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
 
                 if (lift.IsBottomLimitPressed())
                 {
@@ -1269,6 +1385,21 @@ private:
         frc::SmartDashboard::PutNumber(
             "Lift/Relative Position",
             lift.GetPosition()
+        );
+
+        frc::SmartDashboard::PutNumber(
+            "Gripper/Target Angle",
+            gripperTargetAngle
+        );
+
+        frc::SmartDashboard::PutNumber(
+            "Gripper/Command Angle",
+            gripperCommandAngle
+        );
+
+        frc::SmartDashboard::PutBoolean(
+            "Gripper/At Target",
+            IsGripperAtTarget()
         );
 
         frc::SmartDashboard::PutNumber(

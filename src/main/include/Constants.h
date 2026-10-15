@@ -18,6 +18,22 @@ constexpr int kRearMotor       = 0;  // Titan M3
 // More detailed lift/manipulator constants are added later
 // on the manipulator-integration branch.
 constexpr double kLiftMaxOutput = 0.45;
+constexpr double kLiftManualPower = 0.45;
+constexpr double kLiftHomePower = 0.45;
+
+
+// =====================================================
+// GRIPPER
+// Values recovered from the teammate's saved source.
+// =====================================================
+
+constexpr int kGripServoChannel = 3;
+
+constexpr double kGripOpenAngle = 180.0;
+constexpr double kGripClosedAngle = 220.0;
+
+constexpr double kGripStepPerLoop = 1.0;
+constexpr double kGripperTargetToleranceDeg = 1.0;
 
 
 // =====================================================
