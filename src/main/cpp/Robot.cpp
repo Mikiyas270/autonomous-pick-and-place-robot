@@ -207,11 +207,15 @@ private:
         DriveToFlag1200,
         StrafeToFlagSlot,
 
-        // Manipulator hand-off
-        AwaitPlacement,
+        // Placement sequence
+        MoveLiftToFlagApproach,
+        LowerLiftToFlagRest,
+        OpenGripperAtFlag,
+        WaitAfterGripperOpen,
 
         // Leave flag
         BackAwayFlag200,
+        MoveLiftToTravelAfterPlace,
         StrafeBackFromFlagSlot,
 
         // Return to source
@@ -1235,7 +1239,7 @@ private:
                 if (offset <= 1.0)
                 {
                     ChangeAutoState(
-                        AutoState::AwaitPlacement
+                        AutoState::MoveLiftToFlagApproach
                     );
                     break;
                 }
@@ -1248,7 +1252,7 @@ private:
                 if (moved >= offset)
                 {
                     ChangeAutoState(
-                        AutoState::AwaitPlacement
+                        AutoState::MoveLiftToFlagApproach
                     );
                     break;
                 }
@@ -1264,18 +1268,106 @@ private:
             }
 
 
-            case AutoState::AwaitPlacement:
+            case AutoState::MoveLiftToFlagApproach:
             {
-                // Integration hand-off:
-                // placement sequence is added in a later teammate commit.
+                driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                if (MoveLiftTo(
+                        Constants::kFlagBottomApproachPosition,
+                        Constants::kLiftAutoPower,
+                        Constants::kLiftAutoPower))
+                {
+                    ChangeAutoState(
+                        AutoState::LowerLiftToFlagRest
+                    );
+                }
+
+                break;
+            }
+
+
+            case AutoState::LowerLiftToFlagRest:
+            {
+                driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                if (MoveLiftTo(
+                        Constants::kFlagBottomRestPosition,
+                        Constants::kLiftAutoPower,
+                        Constants::kLiftPlaceDownPower))
+                {
+                    lift.Stop();
+
+                    gripperWaitLoops = 0;
+
+                    autoState =
+                        AutoState::OpenGripperAtFlag;
+                }
+
+                break;
+            }
+
+
+            case AutoState::OpenGripperAtFlag:
+            {
                 driveTrain.Stop();
                 lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
+                gripperWaitLoops = 0;
+
+                autoState =
+                    AutoState::WaitAfterGripperOpen;
+
+                break;
+            }
+
+
+            case AutoState::WaitAfterGripperOpen:
+            {
+                driveTrain.Stop();
+                lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
+                if (IsGripperAtTarget())
+                {
+                    ++gripperWaitLoops;
+                }
+                else
+                {
+                    gripperWaitLoops = 0;
+                }
+
+                if (gripperWaitLoops >=
+                    Constants::kGripperSettleLoops)
+                {
+                    gripperWaitLoops = 0;
+
+                    ChangeAutoState(
+                        AutoState::BackAwayFlag200
+                    );
+                }
+
                 break;
             }
 
 
             case AutoState::BackAwayFlag200:
             {
+                lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (-GetDeltaY() >= kFlagClearanceBackMm)
                 {
                     flagReturnRemainingMm =
@@ -1289,7 +1381,7 @@ private:
                     }
 
                     ChangeAutoState(
-                        AutoState::StrafeBackFromFlagSlot
+                        AutoState::MoveLiftToTravelAfterPlace
                     );
 
                     break;
@@ -1306,8 +1398,32 @@ private:
             }
 
 
+            case AutoState::MoveLiftToTravelAfterPlace:
+            {
+                driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
+                if (MoveLiftTo(
+                        Constants::kLiftTravelPosition,
+                        Constants::kLiftAutoPower,
+                        Constants::kLiftAutoPower))
+                {
+                    ChangeAutoState(
+                        AutoState::StrafeBackFromFlagSlot
+                    );
+                }
+
+                break;
+            }
+
+
             case AutoState::StrafeBackFromFlagSlot:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 const double offset =
                     GetFlagSlotOffsetMm();
 
@@ -1345,6 +1461,9 @@ private:
 
             case AutoState::ReturnFromFlagRemaining:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (-GetDeltaY() >= flagReturnRemainingMm)
                 {
                     driveTrain.Stop();
@@ -1371,6 +1490,9 @@ private:
 
             case AutoState::TurnCounterClockwise90:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (RunTurnToRelativeAngle(-90.0))
                 {
                     ChangeAutoState(
@@ -1384,6 +1506,9 @@ private:
 
             case AutoState::ReturnForward350:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (GetDeltaY() >= kReturnForwardApproachMm)
                 {
                     ChangeAutoState(
@@ -1405,6 +1530,9 @@ private:
 
             case AutoState::ReturnAlignLeftWall:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (!leftUltrasonic.IsRangeValid())
                 {
                     driveTrain.Stop();
@@ -1460,6 +1588,9 @@ private:
 
             case AutoState::ReturnForwardUntilIR:
             {
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
                 if (frontIR.GetVoltage()
                     >= kSourceIRStopVoltage)
                 {

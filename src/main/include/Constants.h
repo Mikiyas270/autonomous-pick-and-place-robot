@@ -56,6 +56,18 @@ constexpr double kPickupApproachPower = 0.12;
 
 
 // =====================================================
+// FLAG PLACEMENT CALIBRATION
+// =====================================================
+
+// Bottom-row placement calibration:
+// approach 200 encoder units above the 244 rest position.
+constexpr double kFlagBottomApproachPosition = 444.0;
+constexpr double kFlagBottomRestPosition = 244.0;
+
+constexpr double kLiftPlaceDownPower = 0.45;
+
+
+// =====================================================
 // CONTROLLER / TELEOP DRIVE
 // =====================================================
 
