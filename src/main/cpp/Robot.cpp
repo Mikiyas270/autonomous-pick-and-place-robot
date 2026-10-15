@@ -11,6 +11,7 @@
 #include "GyroSensor.h"
 #include "IRSensor.h"
 #include "LineFollower.h"
+#include "Lift.h"
 #include "RobotDiagnostics.h"
 #include "UltrasonicSensor.h"
 
@@ -21,6 +22,7 @@ public:
     void RobotInit() override
     {
         driveTrain.Stop();
+        lift.Stop();
         gyroXAngleDeg = 0.0;
     }
 
@@ -82,6 +84,7 @@ public:
         else
         {
             RunManualDrive();
+            RunManualLift();
         }
 
         PublishDashboard();
@@ -103,6 +106,8 @@ private:
     };
 
     DriveTrain driveTrain;
+
+    Lift lift;
 
     LineFollower lineFollower;
 
@@ -131,6 +136,8 @@ private:
     static constexpr int kLeftYAxis = 1;
     static constexpr int kRightXAxis = 2;
 
+    static constexpr int kLBButton = 5;
+    static constexpr int kRBButton = 6;
     static constexpr int kLTButton = 7;
     static constexpr int kRTButton = 8;
 
@@ -150,6 +157,9 @@ private:
     enum class AutoState
     {
         Idle,
+
+        // Manipulator initialization
+        HomeLift,
 
         // Initial trip to source
         StrafeRight450,
@@ -315,6 +325,45 @@ private:
 
 
     // =========================================================
+    // MANUAL LIFT
+    // =========================================================
+
+    void RunManualLift()
+    {
+        const bool rb =
+            controller.GetRawButton(kRBButton);
+
+        const bool lb =
+            controller.GetRawButton(kLBButton);
+
+        if (rb && !lb)
+        {
+            lift.Up(
+                Constants::kLiftManualPower
+            );
+        }
+        else if (lb && !rb)
+        {
+            if (lift.IsBottomLimitPressed())
+            {
+                lift.Stop();
+                lift.ZeroAtCurrentPosition();
+            }
+            else
+            {
+                lift.Down(
+                    Constants::kLiftManualPower
+                );
+            }
+        }
+        else
+        {
+            lift.Stop();
+        }
+    }
+
+
+    // =========================================================
     // AUTO CONTROL
     // =========================================================
 
@@ -329,6 +378,7 @@ private:
     void StartAutonomous()
     {
         driveTrain.Stop();
+        lift.Stop();
 
         currentSourceColumn = 1;
         confirmLoops = 0;
@@ -336,8 +386,9 @@ private:
         wasOnBlack = false;
         flagReturnRemainingMm = 0.0;
 
-        // Manipulator integration will insert HomeLift before this.
-        autoState = AutoState::StrafeRight450;
+        lift.ClearHomed();
+
+        autoState = AutoState::HomeLift;
 
         StartMove();
     }
@@ -345,6 +396,7 @@ private:
     void StopAutonomous()
     {
         driveTrain.Stop();
+        lift.Stop();
 
         autoState = AutoState::Idle;
         confirmLoops = 0;
@@ -569,6 +621,30 @@ private:
     {
         switch (autoState)
         {
+            case AutoState::HomeLift:
+            {
+                driveTrain.Stop();
+
+                if (lift.IsBottomLimitPressed())
+                {
+                    lift.Stop();
+                    lift.ZeroAtCurrentPosition();
+
+                    ChangeAutoState(
+                        AutoState::StrafeRight450
+                    );
+
+                    break;
+                }
+
+                lift.Down(
+                    Constants::kLiftHomePower
+                );
+
+                break;
+            }
+
+
             case AutoState::StrafeRight450:
             {
                 if (GetDeltaX() >= kAutoStrafeRightMm)
@@ -793,8 +869,9 @@ private:
             case AutoState::AwaitPickup:
             {
                 // Integration hand-off:
-                // teammate adds lift/gripper pickup states here.
+                // pickup sequence is added in a later teammate commit.
                 driveTrain.Stop();
+                lift.Stop();
                 break;
             }
 
@@ -876,8 +953,9 @@ private:
             case AutoState::AwaitPlacement:
             {
                 // Integration hand-off:
-                // teammate adds lift/gripper placement states here.
+                // placement sequence is added in a later teammate commit.
                 driveTrain.Stop();
+                lift.Stop();
                 break;
             }
 
@@ -1113,6 +1191,7 @@ private:
             case AutoState::Idle:
             {
                 driveTrain.Stop();
+                lift.Stop();
                 break;
             }
         }
@@ -1170,6 +1249,26 @@ private:
         frc::SmartDashboard::PutNumber(
             "Flag/Return Remaining mm",
             flagReturnRemainingMm
+        );
+
+        frc::SmartDashboard::PutBoolean(
+            "Lift/Homed",
+            lift.IsHomed()
+        );
+
+        frc::SmartDashboard::PutBoolean(
+            "Lift/Bottom Limit",
+            lift.IsBottomLimitPressed()
+        );
+
+        frc::SmartDashboard::PutNumber(
+            "Lift/Raw Encoder",
+            lift.GetRawEncoder()
+        );
+
+        frc::SmartDashboard::PutNumber(
+            "Lift/Relative Position",
+            lift.GetPosition()
         );
 
         frc::SmartDashboard::PutNumber(
