@@ -35,6 +35,25 @@ constexpr double kGripClosedAngle = 220.0;
 constexpr double kGripStepPerLoop = 1.0;
 constexpr double kGripperTargetToleranceDeg = 1.0;
 
+// Hold the gripper at its final close position for 25
+// 20-ms robot loops after it reaches the target.
+constexpr int kGripperSettleLoops = 25;
+
+
+// =====================================================
+// LIFT / PICKUP CALIBRATION
+// =====================================================
+
+constexpr double kSourceBottomPosition = 65.0;
+constexpr double kLiftTravelPosition = 300.0;
+
+constexpr double kLiftAutoPower = 0.45;
+constexpr double kLiftTargetTolerance = 8.0;
+
+constexpr double kPickupForwardMm = 40.0;
+constexpr double kPickupRetreatMm = 500.0;
+constexpr double kPickupApproachPower = 0.12;
+
 
 // =====================================================
 // CONTROLLER / TELEOP DRIVE

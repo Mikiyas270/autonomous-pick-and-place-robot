@@ -194,8 +194,13 @@ private:
         ScanForTargetStrip,
         AlignTargetStrip,
 
-        // Manipulator hand-off
-        AwaitPickup,
+        // Pickup sequence
+        MoveLiftToSourceBottom,
+        DriveForward40,
+        CloseGripper,
+        WaitAfterGripperClose,
+        DriveBackward500,
+        MoveLiftToTravelAfterRetreat,
 
         // Travel to flag
         TurnClockwise90,
@@ -285,6 +290,8 @@ private:
     bool wasOnBlack = false;
 
     int confirmLoops = 0;
+
+    int gripperWaitLoops = 0;
 
     bool ltWasPressed = false;
 
@@ -474,6 +481,48 @@ private:
 
 
     // =========================================================
+    // COMMON LIFT MOVE
+    // =========================================================
+
+    bool MoveLiftTo(
+        double target,
+        double upPower,
+        double downPower
+    )
+    {
+        const double error =
+            target -
+            lift.GetPosition();
+
+        if (std::abs(error)
+            <= Constants::kLiftTargetTolerance)
+        {
+            lift.Stop();
+            return true;
+        }
+
+        if (error > 0.0)
+        {
+            lift.Up(upPower);
+        }
+        else
+        {
+            if (lift.IsBottomLimitPressed())
+            {
+                lift.Stop();
+                lift.ZeroAtCurrentPosition();
+            }
+            else
+            {
+                lift.Down(downPower);
+            }
+        }
+
+        return false;
+    }
+
+
+    // =========================================================
     // AUTO CONTROL
     // =========================================================
 
@@ -492,6 +541,7 @@ private:
 
         currentSourceColumn = 1;
         confirmLoops = 0;
+        gripperWaitLoops = 0;
         stripCount = 0;
         wasOnBlack = false;
         flagReturnRemainingMm = 0.0;
@@ -513,6 +563,7 @@ private:
 
         autoState = AutoState::Idle;
         confirmLoops = 0;
+        gripperWaitLoops = 0;
         stripCount = 0;
     }
 
@@ -882,7 +933,7 @@ private:
                     if (confirmLoops >= kConfirmLoops)
                     {
                         ChangeAutoState(
-                            AutoState::AwaitPickup
+                            AutoState::MoveLiftToSourceBottom
                         );
                     }
                 }
@@ -946,7 +997,7 @@ private:
                     if (confirmLoops >= kConfirmLoops)
                     {
                         ChangeAutoState(
-                            AutoState::AwaitPickup
+                            AutoState::MoveLiftToSourceBottom
                         );
                     }
                 }
@@ -982,18 +1033,159 @@ private:
             }
 
 
-            case AutoState::AwaitPickup:
+            case AutoState::MoveLiftToSourceBottom:
             {
-                // Integration hand-off:
-                // pickup sequence is added in a later teammate commit.
+                driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
+                if (MoveLiftTo(
+                        Constants::kSourceBottomPosition,
+                        Constants::kLiftAutoPower,
+                        Constants::kLiftAutoPower))
+                {
+                    ChangeAutoState(
+                        AutoState::DriveForward40
+                    );
+                }
+
+                break;
+            }
+
+
+            case AutoState::DriveForward40:
+            {
+                lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripOpenAngle;
+
+                if (GetDeltaY() >=
+                    Constants::kPickupForwardMm)
+                {
+                    ChangeAutoState(
+                        AutoState::CloseGripper
+                    );
+
+                    break;
+                }
+
+                driveTrain.DriveRobotRelative(
+                    0.0,
+                    -1.0,
+                    0.0,
+                    Constants::kPickupApproachPower
+                );
+
+                break;
+            }
+
+
+            case AutoState::CloseGripper:
+            {
                 driveTrain.Stop();
                 lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                gripperWaitLoops = 0;
+
+                autoState =
+                    AutoState::WaitAfterGripperClose;
+
+                break;
+            }
+
+
+            case AutoState::WaitAfterGripperClose:
+            {
+                driveTrain.Stop();
+                lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                if (IsGripperAtTarget())
+                {
+                    ++gripperWaitLoops;
+                }
+                else
+                {
+                    gripperWaitLoops = 0;
+                }
+
+                if (gripperWaitLoops >=
+                    Constants::kGripperSettleLoops)
+                {
+                    gripperWaitLoops = 0;
+
+                    ChangeAutoState(
+                        AutoState::DriveBackward500
+                    );
+                }
+
+                break;
+            }
+
+
+            case AutoState::DriveBackward500:
+            {
+                lift.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                if (-GetDeltaY() >=
+                    Constants::kPickupRetreatMm)
+                {
+                    ChangeAutoState(
+                        AutoState::MoveLiftToTravelAfterRetreat
+                    );
+
+                    break;
+                }
+
+                driveTrain.DriveRobotRelative(
+                    0.0,
+                    +1.0,
+                    0.0,
+                    kAutoDrivePower
+                );
+
+                break;
+            }
+
+
+            case AutoState::MoveLiftToTravelAfterRetreat:
+            {
+                driveTrain.Stop();
+
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
+                if (MoveLiftTo(
+                        Constants::kLiftTravelPosition,
+                        Constants::kLiftAutoPower,
+                        Constants::kLiftAutoPower))
+                {
+                    turnStartAngleDeg =
+                        gyroXAngleDeg;
+
+                    autoState =
+                        AutoState::TurnClockwise90;
+                }
+
                 break;
             }
 
 
             case AutoState::TurnClockwise90:
             {
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
                 if (RunTurnToRelativeAngle(+90.0))
                 {
                     ChangeAutoState(
@@ -1007,6 +1199,9 @@ private:
 
             case AutoState::DriveToFlag1200:
             {
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
                 const double target =
                     GetFlagTravelTargetMm();
 
@@ -1031,6 +1226,9 @@ private:
 
             case AutoState::StrafeToFlagSlot:
             {
+                gripperTargetAngle =
+                    Constants::kGripClosedAngle;
+
                 const double offset =
                     GetFlagSlotOffsetMm();
 
